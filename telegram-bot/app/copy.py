@@ -43,8 +43,8 @@ Hey, {username}, Did you like what you saw? There are 10+ videos of this little 
 """
 
 START2_SOCIAL_PROOF = """Direct screenshot from the platform! 😍
-"That's why I come to this site every day lol"
-Of course, we have over 140,000 leaked videos of all tastes – school orgies, college orgies, webcam hacking, everything!
+"That's why I come here daily lol"
+Of course, we upload 500 new leaked videos of all tastes – school orgies, college orgies, webcam hacking, everything and everyday!
 Join them and secure your spot now. ⏳"""
 
 
