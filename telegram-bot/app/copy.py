@@ -41,6 +41,7 @@ Hey, {username}, Did you like what you saw?? There are 10+ videos of this little
 ✅ No name on the statement
 ✅ No monthly fee
 ⚠️ To maintain exclusivity and prevent content leaks from the platform, we only release 100 spots per day!
+"""
 
 START2_SOCIAL_PROOF = """Direct screenshot from the platform! 😍
 "That's why I come to this site every day lol"
