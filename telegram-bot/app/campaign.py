@@ -403,17 +403,21 @@ FOLLOWUP_STEPS: list[Step] = [
 
 
 def mark_unpaid(user_id: int, chat_id: int, reset_cycle: bool = True) -> None:
-    redis.hset(
-        _user_key(user_id),
-        mapping={
-            "chat_id": str(chat_id),
-            "paid": "0",
-            "followup_idx": "0",
-            "cycle_count": "0" if reset_cycle else (redis.hget(_user_key(user_id), "cycle_count") or "0"),
-            "bot_id": BOT_ID or "",
-        },
-    )
-    redis.zrem(DUE_ZSET_KEY, str(user_id))
+    key = _user_key(user_id)
+    mapping: dict[str, str] = {
+        "chat_id": str(chat_id),
+        "paid": "0",
+        "bot_id": BOT_ID or "",
+    }
+    if reset_cycle:
+        # Full reset (from /start): clear followup state and unschedule.
+        mapping["followup_idx"] = "0"
+        mapping["cycle_count"] = "0"
+        redis.hset(key, mapping=mapping)
+        redis.zrem(DUE_ZSET_KEY, str(user_id))
+    else:
+        # Soft reset (from plan click): keep followup schedule intact.
+        redis.hset(key, mapping=mapping)
 
 
 def mark_paid(user_id: int) -> None:
@@ -836,8 +840,9 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
     # Temporarily disabled by request (do not auto-delete preview messages).
     # asyncio.create_task(_delete_previews_if_unpaid())
 
-    # ── Followups (10 min) ───────────────────────────────────────────
-    schedule_next_followup(user_id, START_FOLLOWUP_DELAY_SECONDS)
+    # ── Do NOT re-schedule followup here. The /start handler already
+    #    scheduled the single followup. Re-scheduling would reset the
+    #    timer every time the user clicks a plan button. ──
 
 
 async def send_latest_pix_code(bot: Bot, user_id: int, chat_id: int) -> bool:

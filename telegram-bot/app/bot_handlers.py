@@ -75,7 +75,8 @@ async def start(m: Message):
     if m.from_user:
         reset_start_interaction(m.from_user.id)
         mark_unpaid(m.from_user.id, m.chat.id, reset_cycle=True)
-        schedule_next_followup(m.from_user.id, START_FOLLOWUP_DELAY_SECONDS)
+        # Followup is scheduled when user clicks "Watch an exclusive preview",
+        # NOT here at /start.
 
 
 @router.message()
@@ -133,6 +134,8 @@ async def on_start2_preview_1(cq: CallbackQuery):
     record_funnel_event("preview_clicked", user_id=cq.from_user.id)
     username = _format_username(cq.from_user)
     await send_start2_preview_video(cq.bot, cq.message.chat.id, 1, username=username)
+    # Schedule the single followup 6 min from NOW (preview click)
+    schedule_next_followup(cq.from_user.id, START_FOLLOWUP_DELAY_SECONDS)
 
 
 @router.callback_query(lambda c: (c.data or "") == "preview:more_before_pay")
