@@ -164,7 +164,7 @@ async def on_pix_show_code(cq: CallbackQuery):
 @router.callback_query(lambda c: (c.data or "") == "preview:limit_reached")
 async def on_preview_limit_reached(cq: CallbackQuery):
     await cq.answer(
-        "Limite de prévias atingido, pague para ter acesso total.",
+        "Preview limit reached, pay for full access.",
         show_alert=True,
     )
     if cq.from_user:

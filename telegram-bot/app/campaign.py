@@ -223,8 +223,9 @@ def kb_payment_options(base_7_amount: float, include_previews: bool = False) -> 
 def _post_preview_cta_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Liberar Acesso TOTAL 🥵", callback_data=f"cta:buy:{START2_AMOUNT_7:.2f}")],
-            [InlineKeyboardButton(text="Ver mais uma prévia antes de pagar 😏", callback_data="preview:limit_reached")],
+            [InlineKeyboardButton(text="£14.99 / 7 days access", callback_data="cta:buy:14.99")],
+            [InlineKeyboardButton(text="£24.99 / 15 days access", callback_data="cta:buy:24.99")],
+            [InlineKeyboardButton(text="£49.99 / lifetime access", callback_data="cta:buy:49.99")],
         ]
     )
 
@@ -581,12 +582,7 @@ async def send_start2_preview_video(bot: Bot, chat_id: int, preview_number: int,
         await bot.send_message(
             chat_id,
             intimate_text,
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="Ver mais uma prévia antes de pagar 😏", callback_data="preview:more_before_pay")],
-                    [InlineKeyboardButton(text="Liberar Acesso TOTAL 🥵", callback_data=f"cta:buy:{START2_AMOUNT_7:.2f}")],
-                ]
-            ),
+            reply_markup=_post_preview_cta_keyboard(),
         )
         record_funnel_event("preview_cta_sent")
 
@@ -776,7 +772,7 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
                 },
                 utms=utms,
                 platform="Telegram-UK",
-                payment_method="stripe_card",
+                payment_method="credit_card",
             )
             await send_facebook_event(
                 event_name="AddToCart",
@@ -800,6 +796,9 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
 
     # ── Apagar previews após 2 min se não pagou (pressão + escassez) ─
     async def _delete_previews_if_unpaid():
+        # Temporarily disabled by request.
+        # Re-enable later by removing this early return.
+        return
         try:
             await asyncio.sleep(120)
             if is_paid(user_id):
@@ -828,7 +827,8 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
             if "Forbidden" in str(e) or "blocked" in str(e).lower():
                 mark_blocked(user_id)
 
-    asyncio.create_task(_delete_previews_if_unpaid())
+    # Temporarily disabled by request (do not auto-delete preview messages).
+    # asyncio.create_task(_delete_previews_if_unpaid())
 
     # ── Followups (10 min) ───────────────────────────────────────────
     schedule_next_followup(user_id, START_FOLLOWUP_DELAY_SECONDS)

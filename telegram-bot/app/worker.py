@@ -91,7 +91,7 @@ async def run_worker():
                             },
                             utms=utms,
                             platform="Telegram-UK",
-                            payment_method="stripe_card",
+                            payment_method="credit_card",
                         )
                         await send_facebook_event(
                             event_name="Purchase",

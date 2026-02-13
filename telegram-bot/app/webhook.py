@@ -1034,7 +1034,7 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
                     customer=customer_payload,
                     utms=utms,
                     platform="Telegram-UK",
-                    payment_method="stripe_card",
+                    payment_method="credit_card",
                 )
                 await send_facebook_event(
                     event_name="Purchase",

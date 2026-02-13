@@ -160,6 +160,19 @@ def _now_utc_str() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 
 
+def _normalize_utmify_payment_method(method: str) -> str:
+    """
+    UTMify only accepts: credit_card, boleto, pix, paypal, free_price, unknown.
+    Stripe card flows must be reported as credit_card.
+    """
+    normalized = (method or "").strip().lower()
+    if normalized in {"stripe_card", "card", "credit", "creditcard"}:
+        return "credit_card"
+    if normalized in {"credit_card", "boleto", "pix", "paypal", "free_price", "unknown"}:
+        return normalized
+    return "credit_card"
+
+
 async def send_to_utmify_order(
     *,
     order_id: str,
@@ -181,7 +194,7 @@ async def send_to_utmify_order(
     order = {
         "orderId": order_id,
         "platform": platform,
-        "paymentMethod": payment_method,
+        "paymentMethod": _normalize_utmify_payment_method(payment_method),
         "status": status,
         "createdAt": created_at,
         "approvedDate": approved_date,
@@ -259,6 +272,8 @@ async def process_utmify_retries(max_items: int = 10, max_attempts: int = 3) -> 
             attempt = int(item.get("attempt", 1))
         except Exception:
             continue
+        if isinstance(order, dict):
+            order["paymentMethod"] = _normalize_utmify_payment_method(str(order.get("paymentMethod") or ""))
 
         try:
             log("[UTMIFY] RETRY SENDING", f"attempt={attempt}")
