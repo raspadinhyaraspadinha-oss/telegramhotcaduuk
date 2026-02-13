@@ -153,7 +153,9 @@ async def create_pix_payment(
 
     form = {
         "mode": "payment",
+        # card + Stripe Link (enables Apple Pay / Google Pay via dashboard)
         "payment_method_types[0]": "card",
+        "payment_method_types[1]": "link",
         "line_items[0][price_data][currency]": currency,
         "line_items[0][price_data][unit_amount]": str(amount_cents),
         "line_items[0][price_data][product_data][name]": product_name,
@@ -161,6 +163,10 @@ async def create_pix_payment(
         "success_url": _success_url(),
         "cancel_url": _cancel_url(),
         "client_reference_id": str(user_id),
+        # Force English checkout (prevents Portuguese from BR Stripe account)
+        "locale": "en",
+        # Let Stripe detect country via IP (suggests UK for UK users, not BR)
+        "billing_address_collection": "auto",
         # Statement descriptor: what shows on the bank statement (max 22 chars)
         "payment_intent_data[statement_descriptor]": "DIGITAL SERVICES",
         "metadata[user_id]": str(user_id),

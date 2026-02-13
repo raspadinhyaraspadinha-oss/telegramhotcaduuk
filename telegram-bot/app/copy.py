@@ -60,12 +60,12 @@ START2_PREVIEW_VIDEO_CAPTION = "🎬 Preview released."
 # Preencha este texto com o storytelling do pvnova.mp4.
 # Ele sera enviado em formato de "box" logo abaixo do video.
 START2_PREVIEW_1_STORY_BOX = """
-These two young, hairless students from Ireland, recorded a video with a high school student. Their parents paid him to delete it, but we recovered it. In the full video, they have sex together and he cums inside the blonde.
+These two young, hairless students from Cheltenham Ladies’ College, recorded a video with a high school student. Their parents paid him to delete it, but we recovered it. In the full video, they have sex together and he cums inside the blonde.
 """
 
 # Storytelling do videopb.mp4 (preview secundária no reminder pós-Pix)
 PIX_REMINDER_PREVIEW_STORY_BOX = """
-There's a whole folder just about this girl and the math teacher who's now in jail; she was 14 when she made several videos, and the most viewed one on the platform is of her giving anal sex in the school kitchen.
+There's a whole folder just about this girl and her high school sweetheart - she was virgin when she recorded several videos, and the most viewed one on the platform is of her taking it up the ass, in the school kitchen.
 """
 
 PIX_REMINDER_TEXT = """Ei, {username} Seu PIX foi gerado e sua vaga VIP está reservada 🔥
