@@ -156,8 +156,10 @@ async def create_pix_payment(
         "metadata[document]": doc,
         "metadata[phone]": phone_digits,
     }
-    if client_email:
-        form["customer_email"] = client_email
+    # Do NOT pre-fill customer_email — let the user type their own
+    # email on the Stripe Checkout page.
+    # if client_email:
+    #     form["customer_email"] = client_email
     if utms:
         for k, v in utms.items():
             if v:
