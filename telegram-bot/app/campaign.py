@@ -451,11 +451,12 @@ def schedule_next_followup(user_id: int, delay_seconds: int = FOLLOWUP_DELAY_SEC
 
 async def send_start(bot: Bot, chat_id: int, user) -> None:
     import asyncio
-    
+
     username = _format_username(user)
     caption_raw = _personalize_caption(C.START2_CAPTION, username)
     caption = truncate(caption_raw, 1024)
-    
+
+    # ── 1) Envia PRIMEIRA mensagem instantaneamente (video/foto + caption) ──
     media = resolve_media_path(START2_IMAGE)
     if media:
         try:
@@ -477,26 +478,31 @@ async def send_start(bot: Bot, chat_id: int, user) -> None:
             await bot.send_message(chat_id, caption or "Oferta indisponível no momento.", parse_mode="HTML")
     else:
         await bot.send_message(chat_id, caption or "Oferta indisponível no momento.", parse_mode="HTML")
-    
-    record_funnel_event("start_offer_sent")
-    
-    # Delay humanizado antes de enviar prova social + botões
-    await asyncio.sleep(7)
-    
-    proof_img = resolve_media_path(START2_PROOF_IMAGE)
-    if proof_img:
-        try:
-            await bot.send_photo(chat_id, photo=FSInputFile(proof_img))
-        except Exception:
-            pass
-    
-    await bot.send_message(
-        chat_id,
-        C.START2_SOCIAL_PROOF,
-        reply_markup=kb_start_primary_offer(START2_AMOUNT_7),
-    )
 
-    # inicia followups logo após /start (agendamento em bot_handlers)
+    record_funnel_event("start_offer_sent")
+
+    # ── 2) Prova social + botões em background (delay humanizado, NÃO bloqueia) ──
+    async def _send_social_proof_delayed():
+        try:
+            await asyncio.sleep(7)
+
+            proof_img = resolve_media_path(START2_PROOF_IMAGE)
+            if proof_img:
+                try:
+                    await bot.send_photo(chat_id, photo=FSInputFile(proof_img))
+                except Exception:
+                    pass
+
+            await bot.send_message(
+                chat_id,
+                C.START2_SOCIAL_PROOF,
+                reply_markup=kb_start_primary_offer(START2_AMOUNT_7),
+            )
+        except Exception as e:
+            if "Forbidden" in str(e) or "chat not found" in str(e).lower():
+                mark_blocked(user.id if user else 0)
+
+    asyncio.create_task(_send_social_proof_delayed())
 
 
 async def send_plan_options_message(bot: Bot, chat_id: int, base_7_amount: float) -> None:
@@ -576,8 +582,8 @@ async def send_start2_preview_video(bot: Bot, chat_id: int, preview_number: int,
 
     if resend_offer:
         intimate_text = (
-            f"{username}, essa prévia foi só um gostinho do que te espera... 🔥\n"
-            f"Libera o acesso completo e assiste tudo sem censura!"
+            f"{username}, This preview was just a little taste of what awaits you... 🔥\n"
+            f"Unlock full access and watch everything uncensored!"
         )
         await bot.send_message(
             chat_id,
@@ -589,8 +595,8 @@ async def send_start2_preview_video(bot: Bot, chat_id: int, preview_number: int,
 
 async def send_post_preview_payment_buttons(bot: Bot, chat_id: int, username: str = "você") -> None:
     intimate_text = (
-        f"{username}, essa foi sua última prévia... 😏\n"
-        f"Tem mais 10 videos dessa aluna gordinha com o professor, não vai perder né?"
+        f"{username}, that was your last preview... 😏\n"
+        f"there are 10 more videos of this chubby student with the teacher, you're not going to miss them, are you?"
     )
     await bot.send_message(
         chat_id,

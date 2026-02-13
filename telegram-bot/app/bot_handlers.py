@@ -43,8 +43,10 @@ _START_RE = re.compile(r"^/start(?:@\w+)?(?:\s|$)", re.IGNORECASE)
 async def start(m: Message):
     import asyncio
 
-    # /start: envia o vídeo + texto + botão (CTA) INSTANTANEAMENTE
-    # extrai payload do /start (UTM/FBCLID/etc)
+    # ── PRIORIDADE: enviar primeira mensagem o mais rápido possível ──
+    await send_start(m.bot, m.chat.id, m.from_user)
+
+    # ── Tudo abaixo é pós-envio: tracking, Redis, followups (não atrasa UX) ──
     try:
         raw = (m.text or "").strip()
         parts = raw.split(" ", 1)
@@ -52,13 +54,12 @@ async def start(m: Message):
         utms = resolve_start_payload(payload)
         if m.from_user and utms:
             save_utms(m.from_user.id, utms)
-            # Facebook PageView fire-and-forget (NÃO bloqueia o /start)
             if DEFAULT_CLIENT_EMAIL or DEFAULT_CLIENT_PHONE or DEFAULT_CLIENT_DOCUMENT:
                 asyncio.create_task(send_facebook_event(
                     event_name="PageView",
                     event_id=f"pv_{m.from_user.id}_{int(m.date.timestamp())}",
                     amount=None,
-                    currency="BRL",
+                    currency="GBP",
                     customer={
                         "name": DEFAULT_CLIENT_NAME or m.from_user.full_name,
                         "email": DEFAULT_CLIENT_EMAIL or "",
@@ -69,9 +70,8 @@ async def start(m: Message):
                 ))
     except Exception:
         pass
-    await send_start(m.bot, m.chat.id, m.from_user)
+
     record_funnel_event("start_received", user_id=m.from_user.id if m.from_user else None)
-    # inicia followups após o start
     if m.from_user:
         reset_start_interaction(m.from_user.id)
         mark_unpaid(m.from_user.id, m.chat.id, reset_cycle=True)
