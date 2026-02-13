@@ -153,9 +153,8 @@ async def create_pix_payment(
 
     form = {
         "mode": "payment",
-        # card + Stripe Link (enables Apple Pay / Google Pay via dashboard)
+        # card only (Apple Pay / Google Pay work via card when enabled in dashboard)
         "payment_method_types[0]": "card",
-        "payment_method_types[1]": "link",
         "line_items[0][price_data][currency]": currency,
         "line_items[0][price_data][unit_amount]": str(amount_cents),
         "line_items[0][price_data][product_data][name]": product_name,
