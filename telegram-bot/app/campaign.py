@@ -35,7 +35,7 @@ START_INTERACT_PREFIX = "tg:start:interacted:"
 PREVIEW_MSGS_PREFIX = "tg:preview_msgs:"
 
 # Followup timing
-START_FOLLOWUP_DELAY_SECONDS = 360  # 6 min after /start (single followup)
+START_FOLLOWUP_DELAY_SECONDS = 210  # 3.5 min after preview click (single followup)
 FOLLOWUP_DELAY_SECONDS = 360  # kept for legacy compat
 FOLLOWUP_2_TO_3_DELAY_SECONDS = 120 * 60  # unused now
 
@@ -734,7 +734,6 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
             chat_id,
             "❌ Could not create your checkout. Please tap the button again.",
         )
-        schedule_next_followup(user_id, FOLLOWUP_DELAY_SECONDS)
         return
 
     record_funnel_event(

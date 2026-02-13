@@ -998,6 +998,7 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
         from .campaign import mark_paid
         from .tracking import get_utms, send_facebook_event, send_to_utmify_order
         from .config import (
+            BOT_TOKEN,
             DEFAULT_CLIENT_DOCUMENT,
             DEFAULT_CLIENT_EMAIL,
             DEFAULT_CLIENT_NAME,
@@ -1012,6 +1013,20 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
             except Exception:
                 pass
             record_funnel_event("payment_confirmed", user_id=user_id)
+
+            # Deliver access key to user immediately via Telegram
+            try:
+                from .access_delivery import deliver_access_if_needed
+                from aiogram import Bot
+                _bot = Bot(BOT_TOKEN)
+                chat_id_str = r.hget(f"tg:user:{user_id}", "chat_id")
+                if chat_id_str:
+                    await deliver_access_if_needed(_bot, user_id, int(chat_id_str))
+                else:
+                    log("[STRIPE CALLBACK] no chat_id for delivery", {"user_id": user_id})
+                await _bot.session.close()
+            except Exception as e:
+                log("[STRIPE CALLBACK] DELIVERY ERRO", type(e).__name__, str(e))
 
             # Tracking paid (UTMify + Facebook CAPI)
             try:

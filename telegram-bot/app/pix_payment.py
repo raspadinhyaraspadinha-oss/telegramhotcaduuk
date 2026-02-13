@@ -338,10 +338,12 @@ def get_pix_code(user_id: int) -> Optional[str]:
     return redis.hget(_pix_key(user_id), "checkout_url") or redis.hget(_pix_key(user_id), "pix_code")
 
 
-def get_reusable_pending_pix(user_id: int, amount: float, max_age_seconds: int = 300) -> Optional[dict]:
+def get_reusable_pending_pix(user_id: int, amount: float, max_age_seconds: int = 1800) -> Optional[dict]:
     """
-    Reutiliza cobrança pending do mesmo valor em janela curta.
-    Útil para evitar múltiplas cobranças ao clicar repetidamente.
+    Reuse an existing pending Stripe checkout if it's still fresh.
+    Stripe sessions last 24h, so we use a generous 30-min window by default
+    to avoid creating duplicate checkouts when users tap buttons repeatedly.
+    Amount is NOT checked — the last created checkout is always reused while fresh.
     """
     data = redis.hgetall(_pix_key(user_id)) or {}
     if not data:
@@ -360,14 +362,6 @@ def get_reusable_pending_pix(user_id: int, amount: float, max_age_seconds: int =
     except Exception:
         age = max_age_seconds + 1
     if age > max_age_seconds:
-        return None
-
-    raw_amount = data.get("amount") or ""
-    try:
-        same_amount = _to_2(float(raw_amount)) == _to_2(float(amount))
-    except (ValueError, InvalidOperation):
-        same_amount = False
-    if not same_amount:
         return None
 
     return {
