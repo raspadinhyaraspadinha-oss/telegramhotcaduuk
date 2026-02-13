@@ -86,7 +86,7 @@ async def any_message(m: Message):
     # Não responda "Recebido" para comandos (ex: /pixerr)
     if m.text and m.text.strip().startswith("/"):
         return
-    await m.answer("Recebido ✅")
+    await m.answer("Received ✅")
 
 
 @router.callback_query(lambda c: (c.data or "").startswith("cta:"))
@@ -142,11 +142,16 @@ async def on_preview_more_before_pay(cq: CallbackQuery):
         return
     record_funnel_event("preview_more_clicked", user_id=cq.from_user.id)
     username = _format_username(cq.from_user)
-    # Mostra a prévia antiga (videopb.mp4 + storytelling)
-    await send_pix_reminder_preview(cq.bot, cq.message.chat.id)
-    # Delay 2,5s antes de exibir os botões de pagamento
-    await asyncio.sleep(2.5)
-    await send_post_preview_payment_buttons(cq.bot, cq.message.chat.id, username=username)
+    chat_id = cq.message.chat.id
+    bot = cq.bot
+    # Send preview immediately, then buttons after short delay in background
+    await send_pix_reminder_preview(bot, chat_id)
+
+    async def _delayed_buttons():
+        await asyncio.sleep(2.5)
+        await send_post_preview_payment_buttons(bot, chat_id, username=username)
+
+    asyncio.create_task(_delayed_buttons())
 
 
 @router.callback_query(lambda c: (c.data or "") == "pix:show_code")
@@ -158,7 +163,7 @@ async def on_pix_show_code(cq: CallbackQuery):
     if ok:
         record_funnel_event("pix_code_reshown", user_id=cq.from_user.id)
     else:
-        await cq.bot.send_message(cq.message.chat.id, "Nenhum código Pix pendente encontrado.")
+        await cq.bot.send_message(cq.message.chat.id, "No pending payment found. Please select a plan first.")
 
 
 @router.callback_query(lambda c: (c.data or "") == "preview:limit_reached")

@@ -35,9 +35,9 @@ START_INTERACT_PREFIX = "tg:start:interacted:"
 PREVIEW_MSGS_PREFIX = "tg:preview_msgs:"
 
 # Followup timing
-START_FOLLOWUP_DELAY_SECONDS = 600  # 10 min after /start (antes 4min)
-FOLLOWUP_DELAY_SECONDS = 300  # 5 min between followups
-FOLLOWUP_2_TO_3_DELAY_SECONDS = 120 * 60  # 120 min between followup 2 and 3
+START_FOLLOWUP_DELAY_SECONDS = 360  # 6 min after /start (single followup)
+FOLLOWUP_DELAY_SECONDS = 360  # kept for legacy compat
+FOLLOWUP_2_TO_3_DELAY_SECONDS = 120 * 60  # unused now
 
 
 def _preview_msgs_key(chat_id: int) -> str:
@@ -484,7 +484,7 @@ async def send_start(bot: Bot, chat_id: int, user) -> None:
     # ── 2) Prova social + botões em background (delay humanizado, NÃO bloqueia) ──
     async def _send_social_proof_delayed():
         try:
-            await asyncio.sleep(7)
+            await asyncio.sleep(4)
 
             proof_img = resolve_media_path(START2_PROOF_IMAGE)
             if proof_img:
@@ -508,7 +508,7 @@ async def send_start(bot: Bot, chat_id: int, user) -> None:
 async def send_plan_options_message(bot: Bot, chat_id: int, base_7_amount: float) -> None:
     await bot.send_message(
         chat_id,
-        "Escolha o plano ideal para você:",
+        "Choose one of the plans below",
         reply_markup=kb_payment_options(base_7_amount, include_previews=False),
     )
     record_funnel_event("plan_options_opened")
@@ -861,8 +861,10 @@ async def send_latest_pix_code(bot: Bot, user_id: int, chat_id: int) -> bool:
 
 async def send_next_followup(bot: Bot, user_id: int) -> bool:
     """
-    Sends the next follow-up step if user is unpaid.
-    Returns True if a step was sent, False otherwise.
+    Single followup at 6 min: sends videopb preview + storytelling.
+    If user already has a Stripe checkout link → "Complete Payment" button.
+    Otherwise → 3 plans with 15% discount.
+    No further followups are scheduled after this.
     """
     if is_paid(user_id) or is_blocked(user_id):
         return False
@@ -881,75 +883,98 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
         return False
     chat_id = int(raw_chat_id)
 
+    # ── Only fire ONCE (idx 0). After that, stop forever. ──
     idx_raw = redis.hget(key, "followup_idx") or "0"
-    cycle_raw = redis.hget(key, "cycle_count") or "0"
     try:
         idx = int(idx_raw)
     except ValueError:
         idx = 0
-    try:
-        cycle_count = int(cycle_raw)
-    except ValueError:
-        cycle_count = 0
-
-    # stop after 3 full cycles
-    if cycle_count >= 3:
+    if idx >= 1:
+        # Already sent the single followup — remove from queue and stop.
         redis.zrem(DUE_ZSET_KEY, str(user_id))
         return False
 
-    # wrap to next cycle when reach the end
-    if idx >= len(FOLLOWUP_STEPS):
-        idx = 0
-        cycle_count += 1
-        redis.hset(key, "cycle_count", str(cycle_count))
-        if cycle_count >= 3:
-            redis.zrem(DUE_ZSET_KEY, str(user_id))
-            return False
-
-    step = FOLLOWUP_STEPS[idx]
-
-    media = resolve_media_path(step["media_base"])
-    media_key_sent = f"tg:media:sent:{user_id}:{idx}"
-    media_key_fail = f"tg:media:fail:{user_id}:{idx}"
-    already_sent = redis.get(media_key_sent)
-    failed_before = redis.get(media_key_fail)
-    if media and not already_sent and not failed_before:
+    # ── 1) Send videopb preview (not viewable inline) ──
+    media = resolve_media_path(PIX_REMINDER_PREVIEW_VIDEO)
+    caption = truncate(sanitize_telegram_export_text(C.START2_PREVIEW_VIDEO_CAPTION), 1024)
+    if media:
         try:
-            if step["kind"] == "video":
-                await bot.send_video(chat_id, video=FSInputFile(media))
-            else:
-                await bot.send_photo(chat_id, photo=FSInputFile(media))
-            redis.set(media_key_sent, "1")
+            await bot.send_video(chat_id, video=FSInputFile(media), caption=caption or None)
         except Exception as e:
-            # log e segue com o texto para não travar o ciclo
             err = str(e)
             log("[FOLLOWUP] erro mídia", {"user_id": user_id, "media": str(media), "err": err})
             err_lower = err.lower()
             if "forbidden" in err_lower or "chat not found" in err_lower:
                 mark_blocked(user_id)
                 return False
-            # avoid re-sending same media on future cycles to prevent flood
-            redis.set(media_key_fail, "1")
 
-    # text + CTA button (callback inclui o valor com desconto)
-    try:
-        await bot.send_message(
-            chat_id,
-            sanitize_telegram_export_text(step["text"]),
-            reply_markup=kb_payment_options(step["amount"], include_previews=False),
+    # ── 2) Storytelling text ──
+    story_box = (C.PIX_REMINDER_PREVIEW_STORY_BOX or "").strip()
+    if story_box:
+        try:
+            await bot.send_message(
+                chat_id,
+                f"<pre>{_html_escape(story_box)}</pre>",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            err = str(e)
+            err_lower = err.lower()
+            if "forbidden" in err_lower or "chat not found" in err_lower:
+                mark_blocked(user_id)
+                return False
+
+    # ── 3) Buttons: "Complete Payment" if checkout exists, else 3 plans at 15% off ──
+    from .pix_payment import get_pix_code
+    existing_checkout = get_pix_code(user_id)
+
+    if existing_checkout:
+        # User already generated a Stripe checkout — show single Complete Payment button
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Complete Payment 👉", url=existing_checkout)],
+                [InlineKeyboardButton(text="I've paid - Verify", callback_data="pay:verify")],
+            ]
         )
-    except Exception as e:
-        err = str(e)
-        log("[FOLLOWUP] erro mensagem", {"user_id": user_id, "err": err})
-        err_lower = err.lower()
-        if "forbidden" in err_lower or "chat not found" in err_lower:
-            mark_blocked(user_id)
-            return False
+        try:
+            await bot.send_message(
+                chat_id,
+                "Finish the payment through the link below",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            err_lower = str(e).lower()
+            if "forbidden" in err_lower or "chat not found" in err_lower:
+                mark_blocked(user_id)
+                return False
+    else:
+        # No checkout yet — show 3 plans with 15% discount
+        d7 = _q2(14.99 * 0.85)
+        d15 = _q2(24.99 * 0.85)
+        d_life = _q2(49.99 * 0.85)
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=f"£{d7:.2f} / 7 days (15% OFF)", callback_data=f"cta:buy:{d7:.2f}")],
+                [InlineKeyboardButton(text=f"£{d15:.2f} / 15 days (15% OFF)", callback_data=f"cta:buy:{d15:.2f}")],
+                [InlineKeyboardButton(text=f"£{d_life:.2f} / lifetime (15% OFF)", callback_data=f"cta:buy:{d_life:.2f}")],
+            ]
+        )
+        try:
+            await bot.send_message(
+                chat_id,
+                "Choose one of the plans below 🔥",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            err_lower = str(e).lower()
+            if "forbidden" in err_lower or "chat not found" in err_lower:
+                mark_blocked(user_id)
+                return False
 
-    # advance + reschedule
-    redis.hset(key, "followup_idx", str(idx + 1))
-    next_delay = FOLLOWUP_2_TO_3_DELAY_SECONDS if idx == 1 else FOLLOWUP_DELAY_SECONDS
-    schedule_next_followup(user_id, next_delay)
+    # ── Mark as sent and DO NOT reschedule — this is the only followup. ──
+    redis.hset(key, "followup_idx", "1")
+    redis.zrem(DUE_ZSET_KEY, str(user_id))
+    record_funnel_event("single_followup_sent", user_id=user_id)
     return True
 
 
@@ -973,12 +998,9 @@ async def campaign_due_loop(bot: Bot) -> None:
                 redis.zrem(DUE_ZSET_KEY, uid)
                 try:
                     await send_next_followup(bot, int(uid))
-                except Exception:
-                    # in produção: logar
-                    try:
-                        schedule_next_followup(int(uid), FOLLOWUP_DELAY_SECONDS)
-                    except Exception:
-                        pass
+                except Exception as e:
+                    log("[CAMPAIGN] followup error", {"uid": uid, "err": str(e)})
+                    # Single followup model: do NOT re-schedule on error.
                     continue
         except Exception:
             await asyncio.sleep(2.0)

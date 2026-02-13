@@ -328,20 +328,20 @@ async def portal_page():
   </head>
   <body>
     <header>
-      <h1>Conteúdo VIP</h1>
-      <div class="sub">Explore a lista completa de vídeos</div>
+      <h1>VIP Content</h1>
+      <div class="sub">Explore the full video library</div>
     </header>
 
     <section class="filters">
       <div class="filter-card">
-        <div class="filter-title">Filtro de idade (mín. / máx.)</div>
+        <div class="filter-title">Age filter (min / max)</div>
         <div class="range">
           <input id="minAge" type="number" placeholder="Min" />
           <input id="maxAge" type="number" placeholder="Max" />
         </div>
       </div>
       <div class="filter-card">
-        <div class="filter-title">Pessoas famosas</div>
+        <div class="filter-title">Famous people</div>
         <div id="peopleChips" class="chips"></div>
       </div>
     </section>
@@ -350,10 +350,10 @@ async def portal_page():
 
     <div id="popup" class="popup">
       <div class="popup-card" id="popupCard">
-        <div class="popup-title">Digite sua chave de acesso</div>
-        <div class="popup-text">Você recebeu a chave no Telegram após o pagamento.</div>
-        <input id="accessKey" class="input" placeholder="Cole a chave aqui" />
-        <button id="btnCheck" class="btn">Acessar</button>
+        <div class="popup-title">Enter your access key</div>
+        <div class="popup-text">You received the key on Telegram after payment.</div>
+        <input id="accessKey" class="input" placeholder="Paste your key here" />
+        <button id="btnCheck" class="btn">Access</button>
       </div>
     </div>
 
@@ -413,14 +413,14 @@ async def portal_page():
       function updatePopupBalance() {{
         const el = document.getElementById("popupCard");
         el.innerHTML = `
-          <div class="popup-title">Acesso validado</div>
-          <div class="popup-text">Saldo disponível: <strong>R$ 9,99</strong></div>
-          <div class="badge">Plano Prata</div>
-          <div class="popup-text" style="margin-top:10px;">As 100 vagas Prata já foram preenchidas.</div>
-          <div class="popup-text">Faltam <strong>R$ 19,99</strong> para completar o acesso total (Black).</div>
-          <div class="popup-text">Deseja completar agora ou solicitar reembolso de R$ 9,99?</div>
-          <button class="btn" id="btnUpgrade">Comprar acesso total</button>
-          <button class="btn secondary" id="btnRefund">Reembolso</button>
+          <div class="popup-title">Access validated</div>
+          <div class="popup-text">Available balance: <strong>£9.99</strong></div>
+          <div class="badge">Silver Plan</div>
+          <div class="popup-text" style="margin-top:10px;">All 100 Silver spots have been filled.</div>
+          <div class="popup-text">You need <strong>£19.99</strong> more to unlock full access (Black).</div>
+          <div class="popup-text">Would you like to upgrade now or request a refund of £9.99?</div>
+          <button class="btn" id="btnUpgrade">Upgrade to full access</button>
+          <button class="btn secondary" id="btnRefund">Refund</button>
         `;
         document.getElementById("btnUpgrade").onclick = upgradeFlow;
         document.getElementById("btnRefund").onclick = refundFlow;
@@ -447,50 +447,48 @@ async def portal_page():
       async function upgradeFlow() {{
         const key = currentKey;
         if (!key) {{
-          alert("Chave inválida.");
+          alert("Invalid key.");
           return;
         }}
+        const el = document.getElementById("popupCard");
+        el.innerHTML = `
+          <div class="popup-title">Processing...</div>
+          <div class="popup-text">Creating your secure payment link...</div>
+        `;
         const res = await fetch(`/portal/upsell?key=${{encodeURIComponent(key)}}`, {{ method: "POST" }});
         const data = await res.json();
-        const el = document.getElementById("popupCard");
         if (!data.ok) {{
           el.innerHTML = `
-            <div class="popup-title">Erro ao gerar Pix</div>
-            <div class="popup-text">Tente novamente em instantes.</div>
-            <button class="btn secondary" onclick="window.location.reload()">Fechar</button>
+            <div class="popup-title">Payment error</div>
+            <div class="popup-text">Please try again in a moment.</div>
+            <button class="btn secondary" onclick="window.location.reload()">Close</button>
           `;
           return;
         }}
-        const code = data.code || "";
-        const img = data.qr_image || (data.qr_base64 ? `data:image/png;base64,${{data.qr_base64}}` : "");
-        const imgHtml = img ? `<img src="${{img}}" style="width:100%;border-radius:12px;margin:8px 0;" />` : "";
+        const checkoutUrl = data.checkout_url || data.code || "";
+        if (checkoutUrl && checkoutUrl.startsWith("http")) {{
+          // Redirect to Stripe Checkout
+          window.location.href = checkoutUrl;
+          return;
+        }}
+        // Fallback: show link manually
         el.innerHTML = `
-          <div class="popup-title">Pagamento de acesso total</div>
-          <div class="popup-text">Finalize com Pix de R$ 19,99</div>
-          ${{imgHtml}}
-          <div class="qr" id="pixCode">${{code || "Código indisponível"}}</div>
-          <button class="btn secondary" id="btnCopy">Copiar código</button>
-          <button class="btn" id="btnConfirm">Confirmar pagamento</button>
+          <div class="popup-title">Complete your upgrade</div>
+          <div class="popup-text">Pay £19.99 to unlock full access.</div>
+          <a href="${{checkoutUrl}}" class="btn" style="display:block;text-align:center;text-decoration:none;">Pay with Stripe</a>
+          <button class="btn secondary" id="btnConfirm" style="margin-top:8px;">I've paid - Verify</button>
         `;
-        document.getElementById("btnCopy").onclick = async () => {{
-          try {{
-            await navigator.clipboard.writeText(code);
-            alert("Copiado!");
-          }} catch (e) {{
-            alert("Não foi possível copiar.");
-          }}
-        }};
         document.getElementById("btnConfirm").onclick = async () => {{
           const r = await fetch(`/portal/check?key=${{encodeURIComponent(key)}}`);
           const s = await r.json();
           if (s.status === "OK") {{
             el.innerHTML = `
-              <div class="popup-title">Pagamento confirmado</div>
-              <div class="popup-text">Seu acesso total será liberado em breve.</div>
-              <button class="btn secondary" onclick="window.location.reload()">Fechar</button>
+              <div class="popup-title">Payment confirmed</div>
+              <div class="popup-text">Your full access will be unlocked shortly.</div>
+              <button class="btn secondary" onclick="window.location.reload()">Close</button>
             `;
           }} else {{
-            alert("Pagamento ainda pendente. Aguarde alguns instantes.");
+            alert("Payment still pending. Please wait a moment.");
           }}
         }};
       }}
@@ -498,10 +496,10 @@ async def portal_page():
       function refundFlow() {{
         const el = document.getElementById("popupCard");
         el.innerHTML = `
-          <div class="popup-title">Confirmar reembolso</div>
-          <div class="popup-text">Você perderá o acesso imediatamente. Deseja continuar?</div>
-          <button class="btn danger" id="btnYes">Sim, reembolsar</button>
-          <button class="btn secondary" id="btnNo">Não, voltar</button>
+          <div class="popup-title">Confirm refund</div>
+          <div class="popup-text">You will lose access immediately. Do you want to continue?</div>
+          <button class="btn danger" id="btnYes">Yes, refund</button>
+          <button class="btn secondary" id="btnNo">No, go back</button>
         `;
         document.getElementById("btnYes").onclick = () => {{
           window.location.href = "https://facebook.com.br";
@@ -578,35 +576,37 @@ async def portal_upsell(key: str):
     up_key = _upsell_key(key)
     existing = redis.hgetall(up_key) or {}
     now_ts_int = int(datetime.utcnow().timestamp())
+    UPSELL_AMOUNT_GBP = 19.99
     if existing:
         status_existing = _map_gateway_status(existing.get("status"))
         created = int(existing.get("created_at") or "0")
         age = now_ts_int - created if created else 999999
-        if status_existing == "PENDING" and age <= 300 and (existing.get("pix_code") or "").strip():
-            _upsell_event("upsell_pix_reused", {"key": key, "user_id": user_id, "identifier": existing.get("identifier", "")})
+        checkout_url = (existing.get("checkout_url") or existing.get("pix_code") or "").strip()
+        if status_existing == "PENDING" and age <= 300 and checkout_url:
+            _upsell_event("upsell_reused", {"key": key, "user_id": user_id, "identifier": existing.get("identifier", "")})
             return {
                 "ok": True,
-                "code": existing.get("pix_code"),
-                "qr_image": existing.get("qr_image"),
-                "qr_base64": existing.get("qr_base64"),
+                "code": checkout_url,
+                "checkout_url": checkout_url,
                 "identifier": existing.get("identifier", ""),
                 "reused": True,
             }
-    # gera pix de 19,99
+    # Create Stripe checkout for upgrade (£19.99 GBP)
     pix = await create_pix_payment(
         user_id=user_id,
-        amount=19.99,
+        amount=UPSELL_AMOUNT_GBP,
         client_name="Portal Upgrade",
         client_email="portal@upgrade.local",
-        client_phone="11999999999",
+        client_phone="0000000000",
         client_document="000.000.000-00",
         utms=utms,
     )
     if not pix:
-        log("[PORTAL] upsell pix error", {"key": key, "user_id": user_id})
-        _upsell_event("upsell_pix_error", {"key": key, "user_id": user_id})
-        return {"ok": False, "error": "pix_error"}
+        log("[PORTAL] upsell stripe error", {"key": key, "user_id": user_id})
+        _upsell_event("upsell_stripe_error", {"key": key, "user_id": user_id})
+        return {"ok": False, "error": "stripe_error"}
     identifier = pix.get("identifier") or ""
+    checkout_url = pix.get("checkout_url") or pix.get("code") or ""
     now_ts = str(now_ts_int)
     redis.hset(
         up_key,
@@ -614,11 +614,10 @@ async def portal_upsell(key: str):
             "access_key": key,
             "user_id": str(user_id),
             "identifier": identifier,
-            "amount": "19.99",
+            "amount": str(UPSELL_AMOUNT_GBP),
             "status": "PENDING",
-            "pix_code": str(pix.get("code") or ""),
-            "qr_image": str(pix.get("qr_image") or ""),
-            "qr_base64": str(pix.get("qr_base64") or ""),
+            "pix_code": checkout_url,
+            "checkout_url": checkout_url,
             "portal_link": f"{PORTAL_BASE_URL}?key={key}",
             "created_at": now_ts,
             "updated_at": now_ts,
@@ -628,13 +627,12 @@ async def portal_upsell(key: str):
     if identifier:
         redis.hset(UPSELL_IDENTIFIER_MAP_KEY, identifier, key)
     redis.zadd(UPSELL_INDEX_ZSET, {key: int(now_ts)})
-    log("[PORTAL] upsell pix ok", {"key": key, "user_id": user_id, "identifier": identifier})
-    _upsell_event("upsell_pix_created", {"key": key, "user_id": user_id, "identifier": identifier, "amount": 19.99})
+    log("[PORTAL] upsell stripe ok", {"key": key, "user_id": user_id, "identifier": identifier})
+    _upsell_event("upsell_stripe_created", {"key": key, "user_id": user_id, "identifier": identifier, "amount": UPSELL_AMOUNT_GBP})
     return {
         "ok": True,
-        "code": pix.get("code"),
-        "qr_image": pix.get("qr_image"),
-        "qr_base64": pix.get("qr_base64"),
+        "code": checkout_url,
+        "checkout_url": checkout_url,
         "identifier": identifier,
     }
 
