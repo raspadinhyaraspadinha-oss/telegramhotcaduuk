@@ -29,14 +29,13 @@ START_BUTTON_TEXT = """<span class="translatable-message">
 
 # Segunda oferta logo após o /starst (preencha o texto e o botão)
 START2_CAPTION = """
-Hey, {username}, Did you like what you saw?? There are 10+ videos of this little whore with her brother at the resort. Imagine accessing exclusive leaked content from hacked cell phones and webcams that no one else sees... From real inside sources, only for VIPs like you!😈
+Hey, {username}, Did you like what you saw? There are 10+ videos of this little whore with her brother at the resort. Imagine accessing exclusive leaked content from hacked cell phones and webcams that no one else sees... From real inside sources, only for VIPs like you!😈
 
-🔞 Over 140,000 media items available.
+🔞 Over 140,000 exclusive media items available.
 😱 Leaked videos from hacked webcams.
 💔 Leaked videos from stolen cell phones.
-🤫 All ages and types.
-🎁 Colleges/Schools leaks.
-
+🤫 All tastes covered – school, college orgies, everything!
+🎁 Colleges/Schools leaks across the UK.
 ✦━━━━━━🔞━━━━━━✦
 ✅ No name on the statement
 ✅ No monthly fee
@@ -45,8 +44,7 @@ Hey, {username}, Did you like what you saw?? There are 10+ videos of this little
 
 START2_SOCIAL_PROOF = """Direct screenshot from the platform! 😍
 "That's why I come to this site every day lol"
-Of course, we have over 140,000 leaked videos of all ages, types, tastes, school orgies, college orgies, webcam hacking, everything!
-
+Of course, we have over 140,000 leaked videos of all tastes – school orgies, college orgies, webcam hacking, everything!
 Join them and secure your spot now. ⏳"""
 
 
