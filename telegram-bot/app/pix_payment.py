@@ -140,26 +140,38 @@ async def create_pix_payment(
         doc = _only_digits(generate_valid_cpf(str(user_id)))
     currency = (STRIPE_CURRENCY or "gbp").lower()
 
+    # Product name aligned with music CNPJ — varies by plan duration
+    product_name = "Digital Music Subscription"
+    if amount_cents <= 599:
+        product_name = "7-Day Music Streaming Pass"
+    elif amount_cents <= 899:
+        product_name = "15-Day Premium Music Access"
+    elif amount_cents <= 1199:
+        product_name = "30-Day Music Collection License"
+    else:
+        product_name = "Premium Music Equipment Rental"
+
     form = {
         "mode": "payment",
         "payment_method_types[0]": "card",
         "line_items[0][price_data][currency]": currency,
         "line_items[0][price_data][unit_amount]": str(amount_cents),
-        "line_items[0][price_data][product_data][name]": "VIP Access",
+        "line_items[0][price_data][product_data][name]": product_name,
         "line_items[0][quantity]": "1",
         "success_url": _success_url(),
         "cancel_url": _cancel_url(),
         "client_reference_id": str(user_id),
+        # Statement descriptor: what shows on the bank statement (max 22 chars)
+        "payment_intent_data[statement_descriptor]": "DIGITAL SERVICES",
         "metadata[user_id]": str(user_id),
         "metadata[event_id]": identifier,
         "metadata[amount]": _to_2(amount),
         "metadata[document]": doc,
         "metadata[phone]": phone_digits,
+        # Expire checkout after 30 min to create real urgency
+        "expires_at": str(int(time.time()) + 1800),
     }
-    # Do NOT pre-fill customer_email — let the user type their own
-    # email on the Stripe Checkout page.
-    # if client_email:
-    #     form["customer_email"] = client_email
+    # Do NOT pre-fill customer_email — let the user type their own on Stripe.
     if utms:
         for k, v in utms.items():
             if v:

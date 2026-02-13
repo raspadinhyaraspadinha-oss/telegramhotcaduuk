@@ -186,20 +186,32 @@ async def head_r():
 @app.get("/p", response_class=HTMLResponse)
 async def pixel_page(token: str):
     """
-    Página intermediária mínima: dispara PageView via Pixel e redireciona para o bot.
+    Intermediate page: fires FB Pixel PageView, filters bots via JS challenge,
+    then redirects real users (including mobile) to Telegram deeplink.
+    Bots without JS/touch/mouse never get redirected.
     """
     if not token:
         return HTMLResponse("<html><body>Missing token</body></html>", status_code=400)
 
     deeplink = f"{BOT_DEEPLINK_BASE}{token}"
-    # minimal HTML with pixel + fast redirect
     html = f"""<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Redirecting...</title>
+    <style>
+      body {{ margin:0; background:#000; color:#fff; font-family:sans-serif;
+             display:flex; align-items:center; justify-content:center; height:100vh; }}
+      .box {{ text-align:center; padding:20px; }}
+      .spinner {{ width:36px; height:36px; border:3px solid #333; border-top:3px solid #9b7dff;
+                  border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }}
+      @keyframes spin {{ to {{ transform:rotate(360deg) }} }}
+      a {{ color:#9b7dff; text-decoration:none; }}
+      #fallback {{ display:none; margin-top:16px; }}
+    </style>
     <script>
+      // ── Facebook Pixel ──
       !function(f,b,e,v,n,t,s)
       {{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?
       n.callMethod.apply(n,arguments):n.queue.push(arguments)}};
@@ -210,7 +222,42 @@ async def pixel_page(token: str):
       'https://connect.facebook.net/en_US/fbevents.js');
       fbq('init', '{FACEBOOK_PIXEL_BROWSER_ID}');
       fbq('track', 'PageView');
-      setTimeout(function(){{ window.location.href = '{deeplink}'; }}, 350);
+
+      // ── Bot filter: only redirect if real browser environment ──
+      var passed = false;
+      function go() {{
+        if (passed) return;
+        passed = true;
+        window.location.href = '{deeplink}';
+      }}
+
+      // Real browsers: have screen dimensions, support touch or mouse events
+      function check() {{
+        var w = window.innerWidth || screen.width || 0;
+        var h = window.innerHeight || screen.height || 0;
+        // Basic sanity: real device has >0 dimensions and a navigator
+        if (w > 0 && h > 0 && navigator.userAgent && navigator.userAgent.length > 10) {{
+          // Pass — schedule redirect (short delay for pixel to fire)
+          setTimeout(go, 500);
+        }} else {{
+          // Likely bot — show fallback link but don't auto-redirect
+          document.getElementById('fallback').style.display = 'block';
+        }}
+      }}
+
+      // Run check after DOM is ready
+      if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', check);
+      }} else {{
+        check();
+      }}
+
+      // Extra safety: if still here after 4s, show manual link
+      setTimeout(function() {{
+        if (!passed) {{
+          document.getElementById('fallback').style.display = 'block';
+        }}
+      }}, 4000);
     </script>
     <noscript>
       <img height="1" width="1" style="display:none"
@@ -218,8 +265,13 @@ async def pixel_page(token: str):
     </noscript>
   </head>
   <body>
-    <p>Redirecionando...</p>
-    <p><a href="{BOT_PUBLIC_URL}">Se não redirecionar, clique aqui</a></p>
+    <div class="box">
+      <div class="spinner"></div>
+      <div>Loading...</div>
+      <div id="fallback">
+        <a href="{deeplink}">Tap here to continue</a>
+      </div>
+    </div>
   </body>
 </html>"""
     return HTMLResponse(html)

@@ -107,14 +107,14 @@ def kb_single(button_text: str, callback_data: str) -> InlineKeyboardMarkup:
 
 def kb_start_primary_offer(base_7_amount: float) -> InlineKeyboardMarkup:
     """
-    UK start: plans + preview.
+    UK start: 3 subs (7/15/30 days) + free preview hook.
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="£14.99 / 7 days access", callback_data="cta:buy:14.99")],
-            [InlineKeyboardButton(text="£24.99 / 15 days access", callback_data="cta:buy:24.99")],
-            [InlineKeyboardButton(text="£49.99 / lifetime access", callback_data="cta:buy:49.99")],
-            [InlineKeyboardButton(text="Watch an exclusive preview 🎬", callback_data="start2:preview:1")],
+            [InlineKeyboardButton(text="£4.99 / 7 Days Access 🔥", callback_data="cta:buy:4.99")],
+            [InlineKeyboardButton(text="£7.99 / 15 Days Access 😏", callback_data="cta:buy:7.99")],
+            [InlineKeyboardButton(text="£9.99 / 30 Days Access 💎", callback_data="cta:buy:9.99")],
+            [InlineKeyboardButton(text="Watch an Exclusive Leaked Preview Now! 🫣", callback_data="start2:preview:1")],
         ]
     )
 
@@ -223,9 +223,9 @@ def kb_payment_options(base_7_amount: float, include_previews: bool = False) -> 
 def _post_preview_cta_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="£14.99 / 7 days access", callback_data="cta:buy:14.99")],
-            [InlineKeyboardButton(text="£24.99 / 15 days access", callback_data="cta:buy:24.99")],
-            [InlineKeyboardButton(text="£49.99 / lifetime access", callback_data="cta:buy:49.99")],
+            [InlineKeyboardButton(text="£4.99 / 7 Days Access 🔥", callback_data="cta:buy:4.99")],
+            [InlineKeyboardButton(text="£7.99 / 15 Days Access 😏", callback_data="cta:buy:7.99")],
+            [InlineKeyboardButton(text="£9.99 / 30 Days Access 💎", callback_data="cta:buy:9.99")],
         ]
     )
 
@@ -336,7 +336,7 @@ def _qr_fallback_url_from_pix_code(code: str) -> str:
 
 
 # amount displayed on the start CTA buttons
-START2_AMOUNT_7 = 14.99
+START2_AMOUNT_7 = 4.99
 START2_AMOUNT_15 = extract_amount_from_text(C.START2_BUTTON_TEXT_15_DAYS, 26.90)
 START2_AMOUNT_30 = extract_amount_from_text(C.START2_BUTTON_TEXT_30_DAYS, 35.90)
 START2_AMOUNT = START2_AMOUNT_7
@@ -535,15 +535,16 @@ async def send_pix_reminder(bot: Bot, user_id: int, chat_id: int, username: str)
         return
 
     reminder_text = (
-        f"{username}, your spot is still reserved 🔥\n"
-        f"People completed checkout in the last few minutes.\n\n"
-        f"Complete payment now to unlock full access:"
+        f"{username}, your spot is still reserved 🔥\n\n"
+        f"⚠️ Your link expires soon — 3 people just completed checkout.\n"
+        f"🔒 100% discrete, shows as 'Digital Services' on your bank.\n\n"
+        f"Complete now before your spot is gone:"
     )
 
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Complete Payment", url=checkout_url)],
-            [InlineKeyboardButton(text="✅ I've paid - Verify", callback_data="pay:verify")],
+            [InlineKeyboardButton(text="Complete Payment 👉", url=checkout_url)],
+            [InlineKeyboardButton(text="I've paid - Verify ✅", callback_data="pay:verify")],
         ]
     )
     try:
@@ -749,14 +750,17 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
         return
 
     checkout_text = (
-        "Finish the payment through the link below"
+        "🔒 100% discrete — appears as 'Digital Services' on your statement.\n\n"
+        "⏳ This link expires in 30 minutes — complete now to lock your spot.\n"
+        "17 others paid in the last hour and are already watching.\n\n"
+        "Tap below to finish payment:"
     )
     checkout_text = truncate(checkout_text, 1024)
 
     checkout_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Make payment 👉", url=checkout_url)],
-            [InlineKeyboardButton(text="I've paid - Verify", callback_data="pay:verify")],
+            [InlineKeyboardButton(text="I've paid - Verify ✅", callback_data="pay:verify")],
         ]
     )
 
@@ -937,13 +941,14 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="Complete Payment 👉", url=existing_checkout)],
-                [InlineKeyboardButton(text="I've paid - Verify", callback_data="pay:verify")],
+                [InlineKeyboardButton(text="I've paid - Verify ✅", callback_data="pay:verify")],
             ]
         )
         try:
             await bot.send_message(
                 chat_id,
-                "Finish the payment through the link below",
+                "🔒 Secure payment — shows as 'Digital Services' on your bank.\n"
+                "⏳ Your link expires soon. Complete now to keep your access:",
                 reply_markup=kb,
             )
         except Exception as e:
@@ -953,14 +958,14 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
                 return False
     else:
         # No checkout yet — show 3 plans with 15% discount
-        d7 = _q2(14.99 * 0.85)
-        d15 = _q2(24.99 * 0.85)
-        d_life = _q2(49.99 * 0.85)
+        d7 = _q2(4.99 * 0.85)
+        d15 = _q2(7.99 * 0.85)
+        d30 = _q2(9.99 * 0.85)
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=f"£{d7:.2f} / 7 days (15% OFF)", callback_data=f"cta:buy:{d7:.2f}")],
-                [InlineKeyboardButton(text=f"£{d15:.2f} / 15 days (15% OFF)", callback_data=f"cta:buy:{d15:.2f}")],
-                [InlineKeyboardButton(text=f"£{d_life:.2f} / lifetime (15% OFF)", callback_data=f"cta:buy:{d_life:.2f}")],
+                [InlineKeyboardButton(text=f"£{d7:.2f} / 7 Days (15% OFF) 🔥", callback_data=f"cta:buy:{d7:.2f}")],
+                [InlineKeyboardButton(text=f"£{d15:.2f} / 15 Days (15% OFF) 😏", callback_data=f"cta:buy:{d15:.2f}")],
+                [InlineKeyboardButton(text=f"£{d30:.2f} / 30 Days (15% OFF) 💎", callback_data=f"cta:buy:{d30:.2f}")],
             ]
         )
         try:

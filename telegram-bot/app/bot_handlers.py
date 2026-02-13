@@ -100,7 +100,7 @@ async def on_cta_click(cq: CallbackQuery):
     
     # Extrai o valor do callback (formato: cta:buy ou cta:buy:18.90)
     parts = (cq.data or "").split(":")
-    amount = 14.99  # default UK plan
+    amount = 4.99  # default UK plan (7 days hook)
     action = parts[1] if len(parts) >= 2 else "buy"
     if action == "plans":
         base_amount = amount
