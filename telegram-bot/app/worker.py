@@ -37,6 +37,7 @@ async def setup_webhook(bot: Bot):
             url=f"{BASE_URL}/telegram/webhook",
             secret_token=WEBHOOK_SECRET,
             drop_pending_updates=False,
+            allowed_updates=["message", "callback_query"],
         )
 
 

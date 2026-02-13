@@ -3,6 +3,7 @@ import os
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BASE_URL = os.getenv("BASE_URL", "")  # ex: https://seu-servico.up.railway.app
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "change-me")
+BOT_ID = BOT_TOKEN.split(":", 1)[0] if BOT_TOKEN and ":" in BOT_TOKEN else ""
 
 # Valkey/Redis (Railway costuma fornecer REDIS_URL / VALKEY_URL dependendo do plugin)
 REDIS_URL = (
@@ -12,7 +13,7 @@ REDIS_URL = (
     or ""
 )
 
-QUEUE_KEY = os.getenv("QUEUE_KEY", "tg:updates")
+QUEUE_KEY = os.getenv("QUEUE_KEY", f"tg:{BOT_ID}:updates" if BOT_ID else "tg:updates")
 
 # Mangofy Pix Gateway (configure via variáveis de ambiente)
 MANGOFY_API_URL = os.getenv("MANGOFY_API_URL", "https://checkout.mangofy.com.br/api/v1")

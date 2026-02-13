@@ -16,6 +16,7 @@ from aiogram.types import BufferedInputFile, FSInputFile, InlineKeyboardButton, 
 
 from . import copy as C
 from .redis_client import redis
+from .config import BOT_ID
 from .text_utils import (
     collapse_whitespace_one_line,
     sanitize_telegram_export_text,
@@ -408,6 +409,7 @@ def mark_unpaid(user_id: int, chat_id: int, reset_cycle: bool = True) -> None:
             "paid": "0",
             "followup_idx": "0",
             "cycle_count": "0" if reset_cycle else (redis.hget(_user_key(user_id), "cycle_count") or "0"),
+            "bot_id": BOT_ID or "",
         },
     )
     redis.zrem(DUE_ZSET_KEY, str(user_id))
@@ -742,22 +744,18 @@ async def send_after_click_flow(bot: Bot, user_id: int, chat_id: int, amount: fl
         return
 
     checkout_text = (
-        f"{username}, you're one step away from full access 🔓\n\n"
-        f"Plan selected: £{amount:.2f}\n"
-        f"Secure payment via Stripe.\n\n"
-        f"Tap the button below to complete your payment now."
+        "Finish the payment through the link below"
     )
     checkout_text = truncate(checkout_text, 1024)
 
     checkout_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Pay with Stripe", url=checkout_url)],
-            [InlineKeyboardButton(text="✅ I've paid - Verify", callback_data="pay:verify")],
+            [InlineKeyboardButton(text="Make payment 👉", url=checkout_url)],
+            [InlineKeyboardButton(text="I've paid - Verify", callback_data="pay:verify")],
         ]
     )
 
     await bot.send_message(chat_id, checkout_text, reply_markup=checkout_kb)
-    await bot.send_message(chat_id, checkout_url, reply_markup=checkout_kb)
 
     record_funnel_event("checkout_viewed", user_id=user_id, amount=amount)
 
@@ -843,16 +841,15 @@ async def send_latest_pix_code(bot: Bot, user_id: int, chat_id: int) -> bool:
         return False
     checkout_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Pay with Stripe", url=checkout_url)],
-            [InlineKeyboardButton(text="✅ I've paid - Verify", callback_data="pay:verify")],
+            [InlineKeyboardButton(text="Make payment 👉", url=checkout_url)],
+            [InlineKeyboardButton(text="I've paid - Verify", callback_data="pay:verify")],
         ]
     )
     await bot.send_message(
         chat_id,
-        "Use your secure checkout link below:",
+        "Finish the payment through the link below",
         reply_markup=checkout_kb,
     )
-    await bot.send_message(chat_id, checkout_url, reply_markup=checkout_kb)
     return True
 
 
@@ -867,6 +864,14 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
     key = _user_key(user_id)
     raw_chat_id = redis.hget(key, "chat_id")
     if not raw_chat_id:
+        return False
+    # Ignore legacy entries written by another bot sharing the same Redis.
+    owner_bot_id = redis.hget(key, "bot_id")
+    if owner_bot_id and BOT_ID and owner_bot_id != BOT_ID:
+        redis.zrem(DUE_ZSET_KEY, str(user_id))
+        return False
+    if not owner_bot_id:
+        redis.zrem(DUE_ZSET_KEY, str(user_id))
         return False
     chat_id = int(raw_chat_id)
 
@@ -913,7 +918,8 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
             # log e segue com o texto para não travar o ciclo
             err = str(e)
             log("[FOLLOWUP] erro mídia", {"user_id": user_id, "media": str(media), "err": err})
-            if "Forbidden" in err:
+            err_lower = err.lower()
+            if "forbidden" in err_lower or "chat not found" in err_lower:
                 mark_blocked(user_id)
                 return False
             # avoid re-sending same media on future cycles to prevent flood
@@ -927,7 +933,12 @@ async def send_next_followup(bot: Bot, user_id: int) -> bool:
             reply_markup=kb_payment_options(step["amount"], include_previews=False),
         )
     except Exception as e:
-        log("[FOLLOWUP] erro mensagem", {"user_id": user_id, "err": str(e)})
+        err = str(e)
+        log("[FOLLOWUP] erro mensagem", {"user_id": user_id, "err": err})
+        err_lower = err.lower()
+        if "forbidden" in err_lower or "chat not found" in err_lower:
+            mark_blocked(user_id)
+            return False
 
     # advance + reschedule
     redis.hset(key, "followup_idx", str(idx + 1))
