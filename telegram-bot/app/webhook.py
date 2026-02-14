@@ -1012,15 +1012,65 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
             user_id_str = get_redis().hget("tg:pix:identifier_map", session_id) or ""
         if not user_id_str and event_id:
             user_id_str = get_redis().hget("tg:pix:identifier_map", event_id) or ""
+
+        # ── Fallback for payment_intent.* events ──
+        # payment_intent objects don't have client_reference_id and may have
+        # empty metadata (if checkout was created before we added
+        # payment_intent_data[metadata]). Use the Stripe API to look up the
+        # checkout session by payment_intent ID.
+        if not user_id_str and event_type.startswith("payment_intent.") and session_id.startswith("pi_"):
+            try:
+                import httpx
+                from .config import STRIPE_SECRET_KEY
+                async with httpx.AsyncClient(timeout=10.0, headers={"Authorization": f"Bearer {STRIPE_SECRET_KEY}"}) as hc:
+                    res = await hc.get(
+                        "https://api.stripe.com/v1/checkout/sessions",
+                        params={"payment_intent": session_id, "limit": "1"},
+                    )
+                    if res.status_code == 200:
+                        sessions = (res.json().get("data") or [])
+                        if sessions:
+                            cs = sessions[0]
+                            cs_meta = cs.get("metadata") or {}
+                            user_id_str = str(
+                                cs.get("client_reference_id")
+                                or cs_meta.get("user_id")
+                                or ""
+                            ).strip()
+                            if not event_id:
+                                event_id = str(cs_meta.get("event_id") or "")
+                            # Merge the session metadata so tracking works
+                            if not metadata.get("user_id") and cs_meta:
+                                metadata = cs_meta
+                            # Cache the PI -> user mapping for future events
+                            if user_id_str and session_id:
+                                get_redis().hset("tg:pix:identifier_map", session_id, user_id_str)
+                            log("[STRIPE CALLBACK] fallback API resolved", {
+                                "pi": session_id,
+                                "user_id": user_id_str,
+                                "cs_id": cs.get("id"),
+                            })
+            except Exception as e:
+                log("[STRIPE CALLBACK] fallback API error", {"pi": session_id, "err": str(e)})
+
         if not user_id_str:
             log("[STRIPE CALLBACK] user_id ausente", {"session_id": session_id, "event_type": event_type})
             return {"ok": True}
 
         user_id = int(user_id_str)
         status = _map_gateway_status(payment_status)
-        if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+        if event_type in (
+            "checkout.session.completed",
+            "checkout.session.async_payment_succeeded",
+            "payment_intent.succeeded",
+            "charge.succeeded",
+        ):
             status = "OK"
-        elif event_type in ("checkout.session.expired", "checkout.session.async_payment_failed"):
+        elif event_type in (
+            "checkout.session.expired",
+            "checkout.session.async_payment_failed",
+            "payment_intent.payment_failed",
+        ):
             status = "FAILED"
 
         r = get_redis()
@@ -1058,12 +1108,26 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
         )
 
         if status == "OK":
+            # ── Dedup: prevent double tracking if both checkout.session.completed
+            # AND payment_intent.succeeded arrive for the same user ──
+            dedup_key = f"tg:stripe:paid_dedup:{user_id}"
+            already_processed = False
+            try:
+                already_processed = not r.set(dedup_key, "1", nx=True, ex=3600)
+            except Exception:
+                pass
+
             mark_payment_confirmed(user_id)
             mark_paid(user_id)
             try:
                 redis.srem(PIX_PENDING_SET, str(user_id))
             except Exception:
                 pass
+
+            if already_processed:
+                log("[STRIPE CALLBACK] dedup skip (already processed)", {"user_id": user_id, "event_type": event_type})
+                return {"ok": True}
+
             record_funnel_event("payment_confirmed", user_id=user_id)
 
             # Deliver access key to user immediately via Telegram
@@ -1083,14 +1147,27 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
             # Tracking paid (UTMify + Facebook CAPI)
             try:
                 utms = get_utms(user_id)
-                amount_total = int(obj.get("amount_total") or 0)
-                amount = (amount_total / 100.0) if amount_total > 0 else float(r.hget(pix_key, "amount") or "0")
+                # amount_total (checkout session) or amount/amount_received (payment_intent) — in cents
+                amount_cents_raw = int(
+                    obj.get("amount_total")
+                    or obj.get("amount_received")
+                    or obj.get("amount")
+                    or 0
+                )
+                amount = (amount_cents_raw / 100.0) if amount_cents_raw > 0 else float(r.hget(pix_key, "amount") or "0")
                 order_id = str(r.hget(pix_key, "identifier") or event_id or session_id or "")
+                # customer_details (checkout session) or billing_details from charge
+                cust = obj.get("customer_details") or {}
+                if not cust.get("email"):
+                    # payment_intent events don't have customer_details; use charge billing_details
+                    charge_data = (obj.get("charges") or {}).get("data") or []
+                    if charge_data:
+                        cust = charge_data[0].get("billing_details") or {}
                 customer_payload = {
-                    "name": str((obj.get("customer_details") or {}).get("name") or DEFAULT_CLIENT_NAME or ""),
-                    "email": str((obj.get("customer_details") or {}).get("email") or DEFAULT_CLIENT_EMAIL or ""),
-                    "phone": str((obj.get("customer_details") or {}).get("phone") or DEFAULT_CLIENT_PHONE or ""),
-                    "document": str(DEFAULT_CLIENT_DOCUMENT or ""),
+                    "name": str(cust.get("name") or DEFAULT_CLIENT_NAME or ""),
+                    "email": str(cust.get("email") or DEFAULT_CLIENT_EMAIL or ""),
+                    "phone": str(cust.get("phone") or DEFAULT_CLIENT_PHONE or ""),
+                    "document": str(metadata.get("document") or DEFAULT_CLIENT_DOCUMENT or ""),
                 }
                 await send_to_utmify_order(
                     order_id=order_id,

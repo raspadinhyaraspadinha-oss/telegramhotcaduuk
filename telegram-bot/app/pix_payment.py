@@ -168,11 +168,20 @@ async def create_pix_payment(
         "billing_address_collection": "auto",
         # Statement descriptor: what shows on the bank statement (max 22 chars)
         "payment_intent_data[statement_descriptor]": "DIGITAL SERVICES",
+        # ── Metadata on CHECKOUT SESSION (available on checkout.session.completed) ──
         "metadata[user_id]": str(user_id),
         "metadata[event_id]": identifier,
         "metadata[amount]": _to_2(amount),
         "metadata[document]": doc,
         "metadata[phone]": phone_digits,
+        # ── Metadata on PAYMENT INTENT (available on payment_intent.succeeded) ──
+        # Stripe does NOT copy session metadata to the payment_intent automatically,
+        # so we must set it explicitly via payment_intent_data[metadata].
+        "payment_intent_data[metadata][user_id]": str(user_id),
+        "payment_intent_data[metadata][event_id]": identifier,
+        "payment_intent_data[metadata][amount]": _to_2(amount),
+        "payment_intent_data[metadata][document]": doc,
+        "payment_intent_data[metadata][phone]": phone_digits,
         # Expire checkout after 30 min to create real urgency
         "expires_at": str(int(time.time()) + 1800),
     }
@@ -181,6 +190,8 @@ async def create_pix_payment(
         for k, v in utms.items():
             if v:
                 form[f"metadata[utm_{k}]"] = str(v)[:400]
+                # Mirror UTMs to payment_intent metadata too
+                form[f"payment_intent_data[metadata][utm_{k}]"] = str(v)[:400]
 
     try:
         async with httpx.AsyncClient(timeout=20.0, headers=_stripe_headers()) as client:
